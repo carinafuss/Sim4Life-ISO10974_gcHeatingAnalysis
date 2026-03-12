@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from tomlkit import table
 import numpy as np
 import h5py
 import time
@@ -202,7 +203,7 @@ def computePowerWorstOrientation(M):
 
 	print("POWER WORST DIRECTION:\nTheta: %.2f°, Phi: %.2f°, worst B: %.2f, %.2f, %.2f, Max power: %.2f W" %(np.rad2deg(theta), np.rad2deg(phi), worst_B[0], worst_B[1], worst_B[2], max_power))
 		
-	return worst_B
+	return worst_B, np.rad2deg(theta), np.rad2deg(phi), max_power
 
 #######################
 ## Thermal Simulations
@@ -440,7 +441,7 @@ def computeTemperatureWorstOrientation(T, coords):
 	max_temp_point = model.CreatePoint(model.Vec3(list(point_coords)))
 	max_temp_point.Name = "Worst_temperature_point"
 		
-	return worst_B
+	return worst_B, np.rad2deg(theta), np.rad2deg(phi), maxmax_temp
 
 ############################
 ### Visualization
@@ -517,6 +518,21 @@ def add_scalar_field(fname, coords, values):
 	producer.Description = fname
 	document.AllAlgorithms.Add(producer)
 
+def add_table_data(fname, row_dict):
+	table = XPostProcessor.TableData()
+	table.SetDimensions(len(row_dict), 3)
+	table.ColumnMainCaptions = ["Theta", "Phi", "Value"]
+	table.RowCaptions = row_dict.keys()
+
+	for i, (key, value) in enumerate(row_dict.items()):
+		for j in range(len(value)):
+			table.SetValue(i, j, np.float64(value[j]))
+
+	producer = analysis.core.TrivialProducer()
+	producer.SetDataObject(table)
+	producer.Description = fname
+	document.AllAlgorithms.Add(producer)
+
 def main():
 	#EM analysis
 	
@@ -567,16 +583,18 @@ def main():
 	
 		T = np.array([[txx, txy, txz],[txy, tyy, tyz],[txz, tyz, tzz]]).T
 
-	worst_B_power = computePowerWorstOrientation(M)
+	worst_B_power, theta_power, phi_power, max_power = computePowerWorstOrientation(M)
 	
 	if execute_visualizations:
 		# add the field direction vector for the highest deposited power
 		add_worst_B_vector(worst_B_power/bField_amplitude, fname='worstB_powerVector')
-
+		
+		table_row_dict = {"Max Power [W]": [theta_power, phi_power, max_power]}
+		add_table_data("Max Power Table", table_row_dict)
 		
 	if execute_thermal:
-		worst_B_temp = computeTemperatureWorstOrientation(T, coords)
-		
+		worst_B_temp, theta_temp, phi_temp, max_temp = computeTemperatureWorstOrientation(T, coords)
+
 		if execute_visualizations:
 				# add the field direction vector for the worst temperature
 				add_worst_B_vector(worst_B_temp/bField_amplitude, fname='worstB_tempVector')
@@ -590,6 +608,9 @@ def main():
 				field_name = 'worstTempDistr'
 				temp_values = (worst_B_temp @ T @ worst_B_temp)
 				add_scalar_field(field_name, coords, temp_values)
+				
+				table_row_dict = {"Worst Temperature [°C]": [theta_temp, phi_temp, max_temp]}
+				add_table_data("Worst Temperature Table", table_row_dict)
 				
 				return max_temp_values, temp_values
 				
