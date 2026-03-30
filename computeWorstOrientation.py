@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from tomlkit import table
 import numpy as np
+import pandas as pd
 import h5py
 import time
 import s4l_v1.analysis as analysis
@@ -518,20 +519,20 @@ def add_scalar_field(fname, coords, values):
 	producer.Description = fname
 	document.AllAlgorithms.Add(producer)
 
-def add_table_data(fname, row_dict):
-	table = XPostProcessor.TableData()
-	table.SetDimensions(len(row_dict), 3)
-	table.ColumnMainCaptions = ["Theta", "Phi", "Value"]
-	table.RowCaptions = row_dict.keys()
+def add_table_data(fname, data_df):
+    table = XPostProcessor.TableData()
+    table.SetDimensions(data_df.shape[0], data_df.shape[1])
+    table.ColumnMainCaptions = data_df.columns
+    table.RowCaptions = data_df.index.astype(str).tolist()
 
-	for i, (key, value) in enumerate(row_dict.items()):
-		for j in range(len(value)):
-			table.SetValue(i, j, np.float64(value[j]))
-
-	producer = analysis.core.TrivialProducer()
-	producer.SetDataObject(table)
-	producer.Description = fname
-	document.AllAlgorithms.Add(producer)
+    for i in range(data_df.shape[0]):
+        for j in range(data_df.shape[1]):
+            table.SetValue(i, j, np.float64(data_df.iloc[i, j]))
+    
+    producer = analysis.core.TrivialProducer()
+    producer.SetDataObject(table)
+    producer.Description = fname
+    document.AllAlgorithms.Add(producer)
 
 def main():
 	#EM analysis
@@ -589,8 +590,10 @@ def main():
 		# add the field direction vector for the highest deposited power
 		add_worst_B_vector(worst_B_power/bField_amplitude, fname='worstB_powerVector')
 		
-		table_row_dict = {"Max Power [W]": [theta_power, phi_power, max_power]}
-		add_table_data("Max Power Table", table_row_dict)
+		table_row_dict = {"Max Power": [theta_power, phi_power, max_power]}
+		table_column_list = ["Theta [°]", "Phi [°]", "Max. Power [W]"]
+		power_data_df = pd.DataFrame(table_row_dict, index=table_column_list).T
+		add_table_data("Max Power Table", power_data_df)
 		
 	if execute_thermal:
 		worst_B_temp, theta_temp, phi_temp, max_temp = computeTemperatureWorstOrientation(T, coords)
@@ -609,9 +612,11 @@ def main():
 				temp_values = (worst_B_temp @ T @ worst_B_temp)
 				add_scalar_field(field_name, coords, temp_values)
 				
-				table_row_dict = {"Worst Temperature [°C]": [theta_temp, phi_temp, max_temp]}
-				add_table_data("Worst Temperature Table", table_row_dict)
-				
+				table_row_dict = {"Worst Temperature": [theta_temp, phi_temp, max_temp]}
+				table_column_list = ["Theta [°]", "Phi [°]", "Worst Temperature [°C]"]
+				temperature_data_df = pd.DataFrame(table_row_dict, index=table_column_list).T
+				add_table_data("Worst Temperature Table", temperature_data_df)
+
 				return max_temp_values, temp_values
 				
 		return M, T
